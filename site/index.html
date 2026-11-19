@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WALL // cyber news</title>
+<meta name="description" content="Live cybersecurity news wall — multi-source, deduplicated headlines">
+<meta name="theme-color" content="#0a0e0b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WALL">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0e0b; --panel:#0f1511; --panel2:#131b16; --line:#1d2a22;
+  --text:#d3f5dc; --dim:#6b8a75; --faint:#3a5143; --green:#39ff88;
+  --breach:#ff4d5e; --cve:#ff9f1c; --ransomware:#b46cff; --general:#3fa7ff;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono)}
+body{min-height:100vh;padding-bottom:env(safe-area-inset-bottom)}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:760px;margin:0 auto}
+
+/* header */
+header{position:sticky;top:0;z-index:20;background:rgba(10,14,11,.92);backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+.top{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px}
+.logo{font-weight:700;font-size:20px;letter-spacing:.5px;color:var(--green);text-shadow:0 0 12px rgba(57,255,136,.45)}
+.logo small{color:var(--dim);font-weight:400;font-size:11px;margin-left:8px;text-shadow:none;letter-spacing:0}
+.cursor{display:inline-block;width:.55em;height:1em;background:var(--green);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.status{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--dim)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
+.dot.stale{background:var(--cve);box-shadow:0 0 8px var(--cve);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.btn{background:none;border:1px solid var(--line);color:var(--dim);font:inherit;font-size:13px;border-radius:6px;padding:4px 8px;cursor:pointer}
+.btn:active{color:var(--green);border-color:var(--green)}
+.spin{animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.filters{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 12px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--panel);color:var(--dim);font:inherit;font-size:12px;
+  padding:6px 10px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.5px}
+.chip i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.chip b{font-weight:500;color:var(--faint)}
+.chip.on{color:var(--text);border-color:var(--c,var(--green));box-shadow:0 0 0 1px var(--c,var(--green)) inset}
+.chip.on b{color:var(--c,var(--green))}
+
+.demo{margin:12px 16px 0;padding:8px 12px;border:1px dashed var(--cve);color:var(--cve);font-size:11px;border-radius:6px}
+
+/* feed */
+main{padding:4px 12px 80px}
+.sep{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:11px;margin:18px 4px 8px;text-transform:uppercase;letter-spacing:1px}
+.sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--line)}
+.card{position:relative;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--c);border-radius:8px;
+  margin:8px 0;padding:12px 14px 11px;cursor:pointer;transition:background .15s}
+.card:active{background:var(--panel2)}
+.card.new{animation:flash 2.4s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 1px var(--green),0 0 22px rgba(57,255,136,.35);transform:translateY(-6px);opacity:0}
+  15%{transform:none;opacity:1}100%{box-shadow:none}}
+.meta{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim);margin-bottom:6px}
+.tag{color:var(--c);font-weight:700;letter-spacing:.8px}
+.hot{color:var(--cve)}
+.unseen{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);margin-left:auto}
+.title{font-size:15px;line-height:1.4;font-weight:500;color:var(--text)}
+.srcs{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11px;flex-wrap:wrap}
+.badge{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:2px 6px;color:var(--text)}
+.more{color:var(--c);border:1px solid var(--c);border-radius:4px;padding:1px 6px;opacity:.9}
+.bar{height:2px;background:var(--line);border-radius:2px;margin-top:10px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--c);box-shadow:0 0 6px var(--c)}
+
+.detail{display:none;margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+.card.open .detail{display:block}
+.row{display:flex;gap:10px;padding:7px 0;font-size:12px;border-bottom:1px solid rgba(29,42,34,.6)}
+.row:last-child{border-bottom:0}
+.row .t{color:var(--faint);flex:none;width:52px}
+.row .n{color:var(--text);flex:1;min-width:0}
+.row .n span{display:block;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.row .go{color:var(--c)}
+.first{color:var(--green);font-size:10px;margin-left:6px}
+
+.newpill{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 112px);z-index:30;
+  background:var(--green);color:#04120a;font:inherit;font-size:12px;font-weight:700;border:0;border-radius:999px;
+  padding:7px 14px;box-shadow:0 4px 20px rgba(57,255,136,.4);display:none;cursor:pointer}
+.empty{color:var(--dim);text-align:center;padding:60px 20px;font-size:13px}
+footer{color:var(--faint);font-size:10px;text-align:center;padding:10px 0 30px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <div class="logo">&gt;_wall<span class="cursor"></span><small>cyber news // live</small></div>
+      <div class="status"><span class="dot" id="dot"></span><span id="synced">connecting…</span>
+        <button class="btn" id="refresh" aria-label="Refresh">⟳</button></div>
+    </div>
+    <nav class="filters" id="filters"></nav>
+  </div>
+</header>
+<div class="wrap">
+  <div class="demo" id="demo" hidden>⚠ DEMO DATA: sample headlines only, the collector isn't connected yet. Links go nowhere.</div>
+  <main id="feed"><div class="empty">loading feed<span class="cursor"></span></div></main>
+  <footer id="foot"></footer>
+</div>
+<button class="newpill" id="newpill">↑ new stories</button>
+
+<script>
+const TAGS = {
+  all:{label:"All",c:"var(--green)"},
+  breach:{label:"Breach",c:"var(--breach)"},
+  cve:{label:"CVE",c:"var(--cve)"},
+  ransomware:{label:"Ransom",c:"var(--ransomware)"},
+  general:{label:"General",c:"var(--general)"}
+};
+const POLL_MS = 60000;
+let filter = "all", stories = [], known = new Set(), firstLoad = true, generatedAt = null, opened = new Set();
+let seen = new Set();
+try { seen = new Set(JSON.parse(localStorage.getItem("wall.seen") || "[]")); } catch(e) {}
+const hadHistory = seen.size > 0;
+const saveSeen = () => { try { localStorage.setItem("wall.seen", JSON.stringify([...seen].slice(-3000))); } catch(e) {} };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = u => /^https?:\/\//i.test(u || "") ? u : "#";
+
+function ago(ts){
+  const s = Math.max(0, (Date.now() - ts) / 1000);
+  if (s < 60) return "now";
+  if (s < 3600) return Math.floor(s/60) + "m";
+  if (s < 86400) return Math.floor(s/3600) + "h";
+  return Math.floor(s/86400) + "d";
+}
+function dayLabel(ts){
+  const d = new Date(ts), t = new Date(); t.setHours(0,0,0,0);
+  const diff = Math.round((t - new Date(d).setHours(0,0,0,0)) / 86400000);
+  if (diff <= 0) return "today";
+  if (diff === 1) return "yesterday";
+  return d.toLocaleDateString(undefined,{weekday:"long", day:"numeric", month:"short"});
+}
+
+function normalize(data){
+  // demo data is shifted so the newest item is "now"
+  const shift = data.demo ? Date.now() - Date.parse(data.generated_at) : 0;
+  generatedAt = Date.parse(data.generated_at) + shift;
+  $("demo").hidden = !data.demo;
+  return (data.stories || []).map(s => ({
+    ...s,
+    tag: TAGS[s.tag] ? s.tag : "general",
+    first: Date.parse(s.first_seen) + shift,
+    last: Date.parse(s.updated || s.first_seen) + shift,
+    sources: (s.sources || []).map(x => ({...x, ts: Date.parse(x.published) + shift})).sort((a,b) => a.ts - b.ts)
+  })).sort((a,b) => b.last - a.last);
+}
+
+function renderFilters(){
+  const counts = {all: stories.length};
+  stories.forEach(s => counts[s.tag] = (counts[s.tag] || 0) + 1);
+  $("filters").innerHTML = Object.entries(TAGS).map(([k,v]) =>
+    `<button class="chip ${filter===k?"on":""}" data-f="${k}" style="--c:${v.c}">
+      ${k==="all"?"":`<i style="background:${v.c}"></i>`}${v.label} <b>${counts[k]||0}</b></button>`).join("");
+}
+
+function card(s, isNew){
+  const c = TAGS[s.tag].c, n = s.sources.length, first = s.sources[0] || {name:s.source};
+  const heat = Math.min(100, n * 14);
+  const unseen = !seen.has(s.id) && (hadHistory || !firstLoad);
+  return `<article class="card ${isNew?"new":""} ${opened.has(s.id)?"open":""}" data-id="${esc(s.id)}" style="--c:${c}">
+    <div class="meta"><span class="tag">[${TAGS[s.tag].label.toUpperCase()}]</span><span>${ago(s.last)}</span>
+      ${n>=5?`<span class="hot">▲ trending</span>`:""}${unseen?`<span class="unseen"></span>`:""}</div>
+    <div class="title">${esc(s.title)}</div>
+    <div class="srcs"><span class="badge">${esc(first.name)}</span>${n>1?`<span class="more">+${n-1}</span>`:""}</div>
+    <div class="bar"><span style="width:${heat}%"></span></div>
+    <div class="detail">${s.sources.map((x,i) => `
+      <a class="row" href="${esc(safeUrl(x.url))}" target="_blank" rel="noopener noreferrer">
+        <span class="t">${ago(x.ts)}</span>
+        <span class="n">${esc(x.name)}${i===0?`<em class="first">FIRST</em>`:""}<span>${esc(x.title||"")}</span></span>
+        <span class="go">↗</span></a>`).join("")}</div>
+  </article>`;
+}
+
+function render(newIds = new Set()){
+  renderFilters();
+  const list = stories.filter(s => filter === "all" || s.tag === filter);
+  if (!list.length){ $("feed").innerHTML = `<div class="empty">no stories here yet</div>`; return; }
+  let html = "", last = "";
+  for (const s of list){
+    const d = dayLabel(s.last);
+    if (d !== last){ html += `<div class="sep">${esc(d)}</div>`; last = d; }
+    html += card(s, newIds.has(s.id));
+  }
+  $("feed").innerHTML = html;
+  $("foot").textContent = `${stories.length} stories · ${stories.reduce((a,s)=>a+s.sources.length,0)} reports · 7-day window`;
+}
+
+function updateStatus(){
+  if (!generatedAt) return;
+  const age = Date.now() - generatedAt;
+  $("synced").textContent = "synced " + ago(generatedAt) + (ago(generatedAt)==="now"?"":" ago");
+  $("dot").classList.toggle("stale", age > 45*60000);
+}
+
+async function load(manual){
+  const btn = $("refresh");
+  if (manual) btn.innerHTML = `<span class="spin">⟳</span>`;
+  try{
+    const r = await fetch("feed.json?t=" + Date.now(), {cache:"no-store"});
+    if (!r.ok) throw new Error(r.status);
+    const fresh = normalize(await r.json());
+    const newIds = new Set(firstLoad ? [] : fresh.filter(s => !known.has(s.id)).map(s => s.id));
+    stories = fresh; stories.forEach(s => known.add(s.id));
+    render(newIds);
+    if (newIds.size && window.scrollY > 200){
+      $("newpill").textContent = `↑ ${newIds.size} new ${newIds.size===1?"story":"stories"}`;
+      $("newpill").style.display = "block";
+    }
+    if (firstLoad && !hadHistory){ stories.forEach(s => seen.add(s.id)); saveSeen(); }
+    firstLoad = false;
+    updateStatus();
+  }catch(e){
+    $("synced").textContent = "offline";
+    $("dot").classList.add("stale");
+    if (!stories.length) $("feed").innerHTML = `<div class="empty">couldn't load feed — retrying</div>`;
+  }finally{ btn.textContent = "⟳"; }
+}
+
+$("filters").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  filter = b.dataset.f; render(); window.scrollTo({top:0, behavior:"smooth"});
+});
+$("feed").addEventListener("click", e => {
+  if (e.target.closest("a")) return;
+  const c = e.target.closest(".card"); if (!c) return;
+  const id = c.dataset.id;
+  c.classList.toggle("open");
+  c.classList.contains("open") ? opened.add(id) : opened.delete(id);
+  seen.add(id); saveSeen();
+  const u = c.querySelector(".unseen"); if (u) u.remove();
+});
+$("refresh").addEventListener("click", () => load(true));
+$("newpill").addEventListener("click", () => { window.scrollTo({top:0, behavior:"smooth"}); $("newpill").style.display="none"; });
+window.addEventListener("scroll", () => { if (window.scrollY < 100) $("newpill").style.display = "none"; }, {passive:true});
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+
+load();
+setInterval(load, POLL_MS);
+setInterval(updateStatus, 15000);
+</script>
+</body>
+</html>
