@@ -22,7 +22,6 @@ RSS = [
     ("CyberScoop", "https://cyberscoop.com/feed/", "news"),
     ("Security Affairs", "https://securityaffairs.com/feed", "news"),
     ("DataBreaches.net", "https://databreaches.net/feed/", "news"),
-    ("Cybernews", "https://cybernews.com/feed/", "news"),
     # --- vendor / research ---
     ("Cisco Talos", "https://blog.talosintelligence.com/rss/", "vendor"),
     ("Unit 42", "https://unit42.paloaltonetworks.com/feed/", "vendor"),
@@ -35,8 +34,7 @@ RSS = [
     # --- advisories ---
     ("CISA", "https://www.cisa.gov/cybersecurity-advisories/all.xml", "advisory"),
     # --- community ---
-    ("r/netsec", "https://www.reddit.com/r/netsec/.rss", "social"),
-    ("r/cybersecurity", "https://www.reddit.com/r/cybersecurity/top/.rss?t=day", "social"),
+    # Reddit blocks GitHub Actions IPs (429/404) -> re-add later via a different route
 ]
 
 CISA_KEV = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"

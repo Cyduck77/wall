@@ -43,7 +43,7 @@ TAG_RULES = [
                               r"inc ransom|hunters international|ransomhub|scattered spider", re.I)),
     ("breach", re.compile(r"breach|data leak|leaked|exposed|stolen|hacked|compromis|unauthori[sz]ed access|"
                           r"data theft|customer data|personal data|records|cyberattack|cyber attack|"
-                          r"cyber incident|security incident|disclos", re.I)),
+                          r"cyber incident|security incident", re.I)),
     ("cve", re.compile(r"\bcve-\d|vulnerab|zero-day|0-day|\bflaws?\b|exploit|\bpatch|\brce\b|"
                        r"remote code|security update|advisory|\bkev\b|bug", re.I)),
 ]
@@ -141,20 +141,24 @@ def build_stories(items):
         for c in clusters:
             if (ts - c["last"]).total_seconds() > ACTIVE_H * 3600:
                 continue
-            if is_leak and c["has_leak"]:
+            if is_leak or c["has_leak"]:
+                # leak-site posts only merge with news that names the victim
+                if is_leak and c["has_leak"]:
+                    continue
+                named = (is_leak and vname and vname in c["text"]) or \
+                        (not is_leak and any(v and v in title_l for v in c["vnames"]))
+                if named:
+                    best, best_score = c, 2.0
+                    break
                 continue
-            if is_leak and not (victim_toks & c["all_toks"]):
-                continue
-            if c["has_leak"] and not is_leak and not (c["victim_toks"] & toks[i]):
-                continue
-            named = (is_leak and vname and vname in c["text"]) or \
-                    (c["has_leak"] and any(v and v in title_l for v in c["vnames"]))
-            if named or links[i] & c["links"] or cves[i] & c["cves"]:
+            if cves[i] and c["cves"] and not (cves[i] & c["cves"]):
+                continue                     # different CVEs = different stories
+            if links[i] & c["links"] or cves[i] & c["cves"]:
                 best, best_score = c, 2.0
                 break
             cvec = c["vec_sum"] / (np.linalg.norm(c["vec_sum"]) + 1e-9)
             s = float(vecs[i] @ cvec)
-            if s >= hi or (s >= mid and rare[i] & c["rare"]) or (is_leak and s >= mid * 0.8):
+            if s >= hi or (s >= mid and rare[i] & c["rare"]):
                 if s > best_score:
                     best, best_score = c, s
         if best is None:
