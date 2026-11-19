@@ -125,7 +125,7 @@ const TAGS = {
 };
 const POLL_MS = 60000;
 let filter = "all", stories = [], known = new Set(), firstLoad = true, generatedAt = null, opened = new Set();
-let seen = new Set();
+let lastGen = null, seen = new Set(), limit = 120, sourcesInfo = null;
 try { seen = new Set(JSON.parse(localStorage.getItem("wall.seen") || "[]")); } catch(e) {}
 const hadHistory = seen.size > 0;
 const saveSeen = () => { try { localStorage.setItem("wall.seen", JSON.stringify([...seen].slice(-3000))); } catch(e) {} };
@@ -154,6 +154,7 @@ function normalize(data){
   const shift = data.demo ? Date.now() - Date.parse(data.generated_at) : 0;
   generatedAt = Date.parse(data.generated_at) + shift;
   $("demo").hidden = !data.demo;
+  sourcesInfo = data.sources || null;
   return (data.stories || []).map(s => ({
     ...s,
     tag: TAGS[s.tag] ? s.tag : "general",
@@ -194,13 +195,21 @@ function render(newIds = new Set()){
   const list = stories.filter(s => filter === "all" || s.tag === filter);
   if (!list.length){ $("feed").innerHTML = `<div class="empty">no stories here yet</div>`; return; }
   let html = "", last = "";
-  for (const s of list){
+  for (const s of list.slice(0, limit)){
     const d = dayLabel(s.last);
     if (d !== last){ html += `<div class="sep">${esc(d)}</div>`; last = d; }
     html += card(s, newIds.has(s.id));
   }
+  if (list.length > limit) html += `<div class="sep" id="more">loading more…</div>`;
   $("feed").innerHTML = html;
-  $("foot").textContent = `${stories.length} stories · ${stories.reduce((a,s)=>a+s.sources.length,0)} reports · 7-day window`;
+  const m = $("more"); if (m) moreObs.observe(m);
+  let foot = `${stories.length} stories · ${stories.reduce((a,s)=>a+s.sources.length,0)} reports · 7-day window`;
+  if (sourcesInfo){
+    const total = sourcesInfo.ok + sourcesInfo.failed.length;
+    foot += ` · ${sourcesInfo.ok}/${total} sources up`;
+    if (sourcesInfo.failed.length) foot += ` (down: ${sourcesInfo.failed.join(", ")})`;
+  }
+  $("foot").textContent = foot;
 }
 
 function updateStatus(){
@@ -216,7 +225,10 @@ async function load(manual){
   try{
     const r = await fetch("feed.json?t=" + Date.now(), {cache:"no-store"});
     if (!r.ok) throw new Error(r.status);
-    const fresh = normalize(await r.json());
+    const data = await r.json();
+    if (!firstLoad && data.generated_at === lastGen){ updateStatus(); return; }
+    lastGen = data.generated_at;
+    const fresh = normalize(data);
     const newIds = new Set(firstLoad ? [] : fresh.filter(s => !known.has(s.id)).map(s => s.id));
     stories = fresh; stories.forEach(s => known.add(s.id));
     render(newIds);
@@ -234,9 +246,12 @@ async function load(manual){
   }finally{ btn.textContent = "⟳"; }
 }
 
+const moreObs = new IntersectionObserver(es => {
+  if (es.some(e => e.isIntersecting)){ moreObs.disconnect(); limit += 120; render(); }
+}, {rootMargin: "600px"});
 $("filters").addEventListener("click", e => {
   const b = e.target.closest(".chip"); if (!b) return;
-  filter = b.dataset.f; render(); window.scrollTo({top:0, behavior:"smooth"});
+  filter = b.dataset.f; limit = 120; render(); window.scrollTo({top:0, behavior:"smooth"});
 });
 $("feed").addEventListener("click", e => {
   if (e.target.closest("a")) return;

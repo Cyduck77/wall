@@ -1,12 +1,15 @@
-name: Deploy site
+name: Build & deploy wall
 
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "*/10 * * * *"   # collect news every 10 minutes
+    - cron: "17 3 1 * *"     # monthly keepalive (GitHub pauses idle schedules after 60 days)
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -15,13 +18,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  keepalive:
+    if: github.event.schedule == '17 3 1 * *'
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          date -u > .github/keepalive
+          git config user.name "wall-bot"
+          git config user.email "wall-bot@users.noreply.github.com"
+          git add .github/keepalive
+          git commit -m "keepalive" && git push
+
+  deploy:
+    if: github.event.schedule != '17 3 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.model-cache
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: collector/requirements.txt
+
+      - run: pip install -r collector/requirements.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: .model-cache
+          key: fastembed-minilm-l6-v2
+
+      - name: Collect & cluster
+        run: python collector/collect.py --out site
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
