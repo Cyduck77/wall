@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 import urllib.parse
 
 import feedparser
@@ -20,7 +21,7 @@ import numpy as np
 import requests
 
 sys.path.insert(0, os.path.dirname(__file__))
-from sources import RSS, CISA_KEV, RANSOMWARE_LIVE  # noqa: E402
+from sources import RSS, CISA_KEV, RANSOMWARE_LIVE, BLUESKY, MASTODON, TELEGRAM  # noqa: E402
 from cluster import build_stories  # noqa: E402
 
 WINDOW_H = 168            # keep 7 days
@@ -73,6 +74,8 @@ def fetch_rss(name, url, kind):
     for e in feed.entries[:60]:
         title = clean_title(e.get("title"))
         link = e.get("link") or ""
+        if "news.google.com" in url:
+            title = re.sub(r"\s+-\s+[^-]+$", "", title)
         if len(title) < 15 or not link.startswith("http"):
             continue
         if kind == "social":
@@ -90,6 +93,98 @@ def fetch_rss(name, url, kind):
             "id": item_id(link, title), "title": title, "url": link, "source": name,
             "kind": kind, "published": iso(pub), "ext": ext,
         })
+    return out
+
+
+# ---------------------------------------------------------------- social
+SEC_RX = re.compile(r"breach|ransom|cve-|exploit|vulnerab|zero-?day|0day|hack|leak|malware|phish|"
+                    r"backdoor|botnet|apt\d*\b|patch|attack|stealer|compromis|threat actor|ddos|"
+                    r"extort|spyware|rootkit|trojan|wiper|infostealer|cisa|incident", re.I)
+ALERT_HDR = re.compile(r"^\W*(new )?(cyber|threat intelligence|ransomware|data breach|data leak|hacktivist|security)?"
+                       r"\s*(alert|breaking|update)s?\W*$", re.I)
+URL_RX = re.compile(r"https?://\S+|\b[\w.-]+\.(com|net|org|io|co|gov)/\S*")
+
+
+def social_title(text):
+    t = unicodedata.normalize("NFKC", text or "")
+    t = URL_RX.sub("", t)
+    lines = [l.strip(" -•|") for l in t.splitlines()]
+    lines = [l for l in lines if len(re.sub(r"[^\w]", "", l)) >= 3]
+    body = [l for l in lines if not ALERT_HDR.match(l)]
+    if body:
+        lines = body
+    title = ""
+    for l in lines:                       # build up to ~160 chars from the first lines
+        title = (title + " — " + l) if title else l
+        if len(title) >= 60:
+            break
+    title = re.sub(r"\s+", " ", title).strip()
+    return title[:157] + "…" if len(title) > 160 else title
+
+
+def social_item(platform, name, text, url, when, ext=None):
+    title = social_title(text)
+    if len(title) < 25 or not (SEC_RX.search(text or "") or ext):
+        return None                       # chit-chat / memes
+    pub = min(when, NOW)
+    return {"id": item_id(url, title), "title": title, "url": url,
+            "source": f"{platform} · {name}", "kind": "social", "platform": platform.lower(),
+            "published": iso(pub), "ext": ext}
+
+
+def fetch_bluesky(name, handle):
+    r = get("https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?"
+            + urllib.parse.urlencode({"actor": handle, "limit": 40, "filter": "posts_no_replies"})).json()
+    out = []
+    for f in r.get("feed", []):
+        if f.get("reason"):               # skip reposts
+            continue
+        p = f["post"]
+        rec = p.get("record", {})
+        ext = (p.get("embed") or {}).get("external", {}).get("uri")
+        rkey = p["uri"].rsplit("/", 1)[-1]
+        it = social_item("Bluesky", name, rec.get("text", ""),
+                         f"https://bsky.app/profile/{handle}/post/{rkey}",
+                         dt.datetime.fromisoformat(rec.get("createdAt", iso(NOW)).replace("Z", "+00:00")), ext)
+        if it:
+            out.append(it)
+    return out
+
+
+def fetch_mastodon(name, instance, acct):
+    a = get(f"https://{instance}/api/v1/accounts/lookup?acct={acct}").json()
+    sts = get(f"https://{instance}/api/v1/accounts/{a['id']}/statuses?exclude_replies=true&exclude_reblogs=true&limit=40").json()
+    out = []
+    for st in sts:
+        txt = re.sub(r"<br\s*/?>|</p>", "\n", st.get("content", ""))
+        txt = html.unescape(re.sub(r"<[^>]+>", "", txt))
+        ext = (st.get("card") or {}).get("url")
+        it = social_item("Mastodon", name, txt, st.get("url"),
+                         dt.datetime.fromisoformat(st["created_at"].replace("Z", "+00:00")), ext)
+        if it:
+            out.append(it)
+    return out
+
+
+def fetch_telegram(name, channel):
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(get(f"https://t.me/s/{channel}").text, "html.parser")
+    out = []
+    for m in soup.select(".tgme_widget_message_wrap"):
+        body = m.select_one(".tgme_widget_message_text")
+        link = m.select_one("a.tgme_widget_message_date")
+        tm = m.select_one("time[datetime]")
+        if not (body and link and tm):
+            continue
+        ext = None
+        for a in body.select("a[href^=http]"):
+            if "t.me/" not in a["href"]:
+                ext = a["href"]
+                break
+        it = social_item("Telegram", name, body.get_text("\n"), link["href"],
+                         dt.datetime.fromisoformat(tm["datetime"]), ext)
+        if it:
+            out.append(it)
     return out
 
 
@@ -143,6 +238,9 @@ def fetch_ransomware_live():
 
 def collect():
     jobs = {f"rss:{n}": (fetch_rss, (n, u, k)) for n, u, k in RSS}
+    jobs.update({f"Bluesky · {n}": (fetch_bluesky, (n, h)) for n, h in BLUESKY})
+    jobs.update({f"Mastodon · {n}": (fetch_mastodon, (n, i, a)) for n, i, a in MASTODON})
+    jobs.update({f"Telegram · {n}": (fetch_telegram, (n, c)) for n, c in TELEGRAM})
     jobs["CISA KEV"] = (fetch_kev, ())
     jobs["ransomware.live"] = (fetch_ransomware_live, ())
     items, ok, failed = [], [], []

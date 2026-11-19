@@ -22,6 +22,12 @@ RSS = [
     ("CyberScoop", "https://cyberscoop.com/feed/", "news"),
     ("Security Affairs", "https://securityaffairs.com/feed", "news"),
     ("DataBreaches.net", "https://databreaches.net/feed/", "news"),
+    ("The Cyber Express", "https://thecyberexpress.com/feed/", "news"),
+    ("Hackread", "https://hackread.com/feed/", "news"),
+    ("SC Media", "https://www.scworld.com/feed", "news"),
+    ("Cybersecurity Dive", "https://www.cybersecuritydive.com/feeds/news/", "news"),
+    ("GBHackers", "https://gbhackers.com/feed/", "news"),
+    ("Cybernews", "https://news.google.com/rss/search?q=site:cybernews.com+when:7d&hl=en-US&gl=US&ceid=US:en", "news"),
     # --- vendor / research ---
     ("Cisco Talos", "https://blog.talosintelligence.com/rss/", "vendor"),
     ("Unit 42", "https://unit42.paloaltonetworks.com/feed/", "vendor"),
@@ -29,6 +35,8 @@ RSS = [
     ("Google Threat Intel", "https://cloud.google.com/blog/topics/threat-intelligence/rss/", "vendor"),
     ("Securelist", "https://securelist.com/feed/", "vendor"),
     ("WeLiveSecurity", "https://www.welivesecurity.com/en/rss/feed/", "vendor"),
+    ("Malwarebytes Labs", "https://www.malwarebytes.com/blog/feed/index.xml", "vendor"),
+    ("Sophos News", "https://news.sophos.com/en-us/feed/", "vendor"),
     ("Schneier", "https://www.schneier.com/feed/atom/", "vendor"),
     ("SANS ISC", "https://isc.sans.edu/rssfeed_full.xml", "vendor"),
     # --- advisories ---
@@ -39,3 +47,21 @@ RSS = [
 
 CISA_KEV = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 RANSOMWARE_LIVE = "https://api.ransomware.live/v2/recentvictims"
+
+# --- social (no accounts needed: public endpoints) ---
+# handles verified active on 2026-11-19
+BLUESKY = [
+    ("Kevin Beaumont", "doublepulsar.com"),
+    ("Catalin Cimpanu", "campuscodi.risky.biz"),
+    ("HackManac", "hackmanac.com"),
+    ("FalconFeeds", "falconfeedsio.bsky.social"),
+    ("404 Media", "404media.co"),
+]
+MASTODON = [  # (name, instance, account)
+    ("Brian Krebs", "infosec.exchange", "briankrebs"),
+    ("Will Dormann", "infosec.exchange", "wdormann"),
+]
+TELEGRAM = [  # public web preview t.me/s/<channel>
+    ("DarkfeedNews", "DarkfeedNews"),
+    ("vx-underground", "vxunderground"),
+]

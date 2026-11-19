@@ -42,7 +42,7 @@ TAG_RULES = [
                               r"black ?basta|medusa|rhysida|8base|bianlian|dragonforce|safepay|play ransomware|"
                               r"inc ransom|hunters international|ransomhub|scattered spider", re.I)),
     ("breach", re.compile(r"breach|data leak|leaked|exposed|stolen|hacked|compromis|unauthori[sz]ed access|"
-                          r"data theft|customer data|personal data|records|cyberattack|cyber attack|"
+                          r"data theft|customer data|personal data|records|cyberattack|cyber attack|creds|credential|dump|"
                           r"cyber incident|security incident", re.I)),
     ("cve", re.compile(r"\bcve-\d|vulnerab|zero-day|0-day|\bflaws?\b|exploit|\bpatch|\brce\b|"
                        r"remote code|security update|advisory|\bkev\b|bug", re.I)),
@@ -193,13 +193,15 @@ def build_stories(items):
         stories.append({
             "id": hashlib.sha1(ms[0]["id"].encode()).hexdigest()[:12],
             "tag": tag_story(ms),
+            "social_only": all(m["kind"] == "social" for m in srcs),
             "title": head["title"],
             "url": head["url"],
             "source": srcs[0]["source"],
             "first_seen": ms[0]["published"],
             "updated": ms[-1]["published"],
             "sources": [{"name": m["source"], "url": m["url"], "title": m["title"],
-                         "published": m["published"], "kind": m["kind"]} for m in srcs],
+                         "published": m["published"], "kind": m["kind"],
+                         **({"platform": m["platform"]} if m.get("platform") else {})} for m in srcs],
         })
     stories.sort(key=lambda s: s["updated"], reverse=True)
     return stories
