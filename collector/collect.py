@@ -97,9 +97,11 @@ def fetch_rss(name, url, kind):
 
 
 # ---------------------------------------------------------------- social
-SEC_RX = re.compile(r"breach|ransom|cve-|exploit|vulnerab|zero-?day|0day|hack|leak|malware|phish|"
-                    r"backdoor|botnet|apt\d*\b|patch|attack|stealer|compromis|threat actor|ddos|"
-                    r"extort|spyware|rootkit|trojan|wiper|infostealer|cisa|incident", re.I)
+SEC_RX = re.compile(r"\b(breach\w*|ransom\w*|cve-\d|exploit\w*|vulnerab\w*|zero-?days?|0-?days?|hack(ed|ers?|ing)?|"
+                    r"leak(ed|s)?|malware|phish\w*|backdoor\w*|botnets?|apt\d+|patch(ed|es)?|attack(s|ed|ers?)?|"
+                    r"\w*stealer|compromis\w*|threat actors?|ddos|extort\w*|spyware|rootkit|trojan\w*|wiper|"
+                    r"cisa|incident|victims?|data theft|credentials?)\b", re.I)
+MOCK_RX = re.compile(r"([a-z][A-Z]){3}")      # mOcKiNg case memes
 ALERT_HDR = re.compile(r"^\W*(new )?(cyber|threat intelligence|ransomware|data breach|data leak|hacktivist|security)?"
                        r"\s*(alert|breaking|update)s?\W*$", re.I)
 URL_RX = re.compile(r"https?://\S+|\b[\w.-]+\.(com|net|org|io|co|gov)/\S*")
@@ -124,7 +126,7 @@ def social_title(text):
 
 def social_item(platform, name, text, url, when, ext=None):
     title = social_title(text)
-    if len(title) < 25 or not (SEC_RX.search(text or "") or ext):
+    if len(title) < 25 or not SEC_RX.search(text or "") or MOCK_RX.search(text or ""):
         return None                       # chit-chat / memes
     pub = min(when, NOW)
     return {"id": item_id(url, title), "title": title, "url": url,
@@ -308,6 +310,10 @@ def main():
     print("fetching sources…")
     new, ok, failed = ([], [], []) if a.no_fetch else collect()
     prev = load_prev(a.prev_url, a.offline_state)
+    # re-apply today's filters to stored items, so rule changes clean up the history too
+    blocked = {"Sophos News", "SC Media", "GBHackers"}
+    prev = [p for p in prev if p["source"] not in blocked and
+            (p["kind"] != "social" or (SEC_RX.search(p["title"]) and not MOCK_RX.search(p["title"])))]
     items = merge(prev, new)
     print(f"items: new={len(new)} prev={len(prev)} window={len(items)}")
     if not items:

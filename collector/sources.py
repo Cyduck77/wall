@@ -24,9 +24,7 @@ RSS = [
     ("DataBreaches.net", "https://databreaches.net/feed/", "news"),
     ("The Cyber Express", "https://thecyberexpress.com/feed/", "news"),
     ("Hackread", "https://hackread.com/feed/", "news"),
-    ("SC Media", "https://www.scworld.com/feed", "news"),
     ("Cybersecurity Dive", "https://www.cybersecuritydive.com/feeds/news/", "news"),
-    ("GBHackers", "https://gbhackers.com/feed/", "news"),
     ("Cybernews", "https://news.google.com/rss/search?q=site:cybernews.com+when:7d&hl=en-US&gl=US&ceid=US:en", "news"),
     # --- vendor / research ---
     ("Cisco Talos", "https://blog.talosintelligence.com/rss/", "vendor"),
@@ -36,7 +34,6 @@ RSS = [
     ("Securelist", "https://securelist.com/feed/", "vendor"),
     ("WeLiveSecurity", "https://www.welivesecurity.com/en/rss/feed/", "vendor"),
     ("Malwarebytes Labs", "https://www.malwarebytes.com/blog/feed/index.xml", "vendor"),
-    ("Sophos News", "https://news.sophos.com/en-us/feed/", "vendor"),
     ("Schneier", "https://www.schneier.com/feed/atom/", "vendor"),
     ("SANS ISC", "https://isc.sans.edu/rssfeed_full.xml", "vendor"),
     # --- advisories ---
