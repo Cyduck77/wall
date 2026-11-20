@@ -53,8 +53,6 @@ mark{background:rgba(57,255,136,.18);color:var(--green);border-radius:2px;paddin
 .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
 .dot.stale{background:var(--cve);box-shadow:0 0 8px var(--cve);animation:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-.btn{background:none;border:1px solid var(--line);color:var(--dim);font:inherit;font-size:13px;border-radius:6px;padding:4px 8px;cursor:pointer}
-.btn:active{color:var(--green);border-color:var(--green)}
 .spin{animation:spin .8s linear infinite;display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -118,8 +116,7 @@ footer{color:var(--faint);font-size:10px;text-align:center;padding:10px 0 30px}
       <label class="prompt" for="q"><span class="logo">&gt;_wall</span><span class="gt">&gt;</span>
         <input id="q" type="search" placeholder="search…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
         <button class="clear" id="clear" aria-label="Clear search" hidden>×</button></label>
-      <div class="status"><span class="dot" id="dot"></span><span id="synced">…</span>
-        <button class="btn" id="refresh" aria-label="Refresh">⟳</button></div>
+      <div class="status"><span class="dot" id="dot"></span><span id="synced">…</span></div>
     </div>
     <nav class="filters" id="filters"></nav>
   </div>
@@ -259,14 +256,13 @@ function render(newIds = new Set()){
 function updateStatus(){
   if (!generatedAt) return;
   const age = Date.now() - generatedAt;
-  $("synced").textContent = ago(generatedAt);
+  const a = ago(generatedAt);
+  $("synced").textContent = a === "now" ? "just now" : a + " ago";
   $("synced").title = "last sync " + new Date(generatedAt).toLocaleString();
   $("dot").classList.toggle("stale", age > 45*60000);
 }
 
 async function load(manual){
-  const btn = $("refresh");
-  if (manual) btn.innerHTML = `<span class="spin">⟳</span>`;
   try{
     const r = await fetch("feed.json?t=" + Date.now(), {cache:"no-store"});
     if (!r.ok) throw new Error(r.status);
@@ -288,7 +284,7 @@ async function load(manual){
     $("synced").textContent = "offline";
     $("dot").classList.add("stale");
     if (!stories.length) $("feed").innerHTML = `<div class="empty">couldn't load feed — retrying</div>`;
-  }finally{ btn.textContent = "⟳"; }
+  }
 }
 
 const moreObs = new IntersectionObserver(es => {
@@ -307,7 +303,6 @@ $("feed").addEventListener("click", e => {
   seen.add(id); saveSeen();
   const u = c.querySelector(".unseen"); if (u) u.remove();
 });
-$("refresh").addEventListener("click", () => load(true));
 let qTimer;
 $("q").addEventListener("input", e => {
   clearTimeout(qTimer);
