@@ -23,6 +23,7 @@ import requests
 sys.path.insert(0, os.path.dirname(__file__))
 from sources import RSS, HIBP_BREACHES, CISA_KEV, RANSOMWARE_LIVE, BLUESKY, MASTODON, TELEGRAM, STRICT, SKIP_TITLE  # noqa: E402
 from cluster import build_stories  # noqa: E402
+from enrich import enrich, prune, find_cves  # noqa: E402
 
 WINDOW_H = 168            # keep 7 days
 UA = "WallNewsBot/1.0 (+https://cyduck77.github.io/wall)"
@@ -93,10 +94,13 @@ def fetch_rss(name, url, kind):
         tp = e.get("published_parsed") or e.get("updated_parsed")
         pub = dt.datetime.fromtimestamp(time.mktime(tp), dt.timezone.utc) if tp else NOW
         pub = min(pub, NOW)
-        out.append({
-            "id": item_id(link, title), "title": title, "url": link, "source": name,
-            "kind": kind, "published": iso(pub), "ext": ext,
-        })
+        body = " ".join([title, e.get("summary") or ""] + [c.get("value", "") for c in (e.get("content") or [])])
+        cves = find_cves(body)[:6]
+        it = {"id": item_id(link, title), "title": title, "url": link, "source": name,
+              "kind": kind, "published": iso(pub), "ext": ext}
+        if cves:
+            it["cves"] = cves
+        out.append(it)
     return out
 
 
@@ -134,9 +138,13 @@ def social_item(platform, name, text, url, when, ext=None):
     if len(title) < 25 or not SEC_RX.search(title) or MOCK_RX.search(text or ""):
         return None                       # chit-chat / memes
     pub = min(when, NOW)
-    return {"id": item_id(url, title), "title": title, "url": url,
-            "source": f"{platform} · {name}", "kind": "social", "platform": platform.lower(),
-            "published": iso(pub), "ext": ext}
+    it = {"id": item_id(url, title), "title": title, "url": url,
+          "source": f"{platform} · {name}", "kind": "social", "platform": platform.lower(),
+          "published": iso(pub), "ext": ext}
+    cves = find_cves(text)[:6]
+    if cves:
+        it["cves"] = cves
+    return it
 
 
 def fetch_bluesky(name, handle):
@@ -231,7 +239,7 @@ def fetch_kev():
         title = f"CISA KEV: {cve} — {name} exploited in the wild"
         url = f"https://nvd.nist.gov/vuln/detail/{cve}"
         out.append({"id": item_id(url, title), "title": title, "url": url, "source": "CISA KEV",
-                    "kind": "advisory", "published": iso(min(pub, NOW))})
+                    "kind": "advisory", "published": iso(min(pub, NOW)), "cves": [cve]})
     return out
 
 
@@ -291,14 +299,14 @@ def collect():
 def load_prev(prev_url, offline):
     try:
         if offline:
-            return json.load(open(offline)).get("items", [])
+            return json.load(open(offline))
         r = requests.get(prev_url, params={"t": int(time.time())}, headers={"User-Agent": UA}, timeout=TIMEOUT)
         if r.status_code == 200:
-            return r.json().get("items", [])
+            return r.json()
         print(f"  no previous state ({r.status_code})")
     except Exception as e:
         print(f"  no previous state ({e})")
-    return []
+    return {}
 
 
 def merge(prev, new):
@@ -316,6 +324,8 @@ def merge(prev, new):
             old = by_id[it["id"]]
             if it["published"] < old["published"]:
                 old["published"] = it["published"]
+            for k, v in it.items():              # fields added in newer collector versions
+                old.setdefault(k, v)
             continue
         if key in seen_titles:
             continue
@@ -336,7 +346,9 @@ def main():
     t0 = time.time()
     print("fetching sources…")
     new, ok, failed = ([], [], []) if a.no_fetch else collect()
-    prev = load_prev(a.prev_url, a.offline_state)
+    prev_state = load_prev(a.prev_url, a.offline_state)
+    prev = prev_state.get("items", [])
+    cve_cache = prev_state.get("cve_cache", {})
     # re-apply today's filters to stored items, so rule changes clean up the history too
     blocked = {"Sophos News", "SC Media", "GBHackers"}
     prev = [p for p in prev if p["source"] not in blocked
@@ -349,12 +361,25 @@ def main():
         sys.exit("no items at all — refusing to publish an empty wall")
 
     stories = build_stories(items)
+    if not os.environ.get("WALL_NO_ENRICH"):
+        try:
+            cve_cache = enrich(stories, items, cve_cache, NOW)
+            cve_cache = prune(cve_cache, {c["id"] for s_ in stories for c in s_.get("cves", [])})
+        except Exception as e:                       # enrichment must never break the wall
+            print(f"  enrich: skipped ({type(e).__name__}: {e})")
+    for s_ in stories:
+        s_.pop("_member_cves", None)
+        s_.pop("_cves", None)
     from collections import Counter
     print(f"stories: {len(stories)}  (multi-source: {sum(len(s['sources']) > 1 and not s.get('bundle') for s in stories)})")
     print("  tags:", dict(Counter(s["tag"] for s in stories)))
     if True:  # log a sample of untagged stories to tune the tag rules
         for s_ in [s for s in stories if s["tag"] == "general"][:80]:
             print("  GEN |", s_["sources"][0]["name"], "|", s_["title"][:110])
+    withc = [s for s in stories if s.get("cves")]
+    print(f"  CVE context: {len(withc)} stories, {sum('cvss' in c for s in withc for c in s['cves'])} scored, "
+          f"{sum(c.get('kev', False) for s in withc for c in s['cves'])} exploited, "
+          f"{sum(bool(c.get('poc')) for s in withc for c in s['cves'])} with PoC")
     print("  claim bundles:", {s["id"]: len(s["sources"]) for s in stories if s.get("bundle")})
 
     os.makedirs(a.out, exist_ok=True)
@@ -366,7 +391,8 @@ def main():
     with open(os.path.join(a.out, "feed.json"), "w") as f:
         json.dump(feed, f, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(a.out, "state.json"), "w") as f:
-        json.dump({"generated_at": iso(NOW), "items": items}, f, ensure_ascii=False, separators=(",", ":"))
+        json.dump({"generated_at": iso(NOW), "items": items, "cve_cache": cve_cache},
+                  f, ensure_ascii=False, separators=(",", ":"))
     print(f"done in {time.time() - t0:.1f}s")
 
 

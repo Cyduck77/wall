@@ -126,6 +126,24 @@ main{padding:4px 12px 80px}
 .card.open .toggle .ti{transform:rotate(180deg)}
 .soc-count{color:var(--social);display:inline-flex;align-items:center;gap:4px}
 
+/* CVE context */
+.cves{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px;font-size:11px}
+.cve-id{color:var(--text);font-weight:500;border-bottom:1px dotted var(--faint)}
+.pill{display:inline-flex;align-items:center;gap:4px;border-radius:4px;padding:1px 6px;font-weight:700;font-size:10px;letter-spacing:.4px;border:1px solid currentColor}
+.sev-CRITICAL{color:#ff3b4e} .sev-HIGH{color:#ff9f1c} .sev-MEDIUM{color:#ffd23f} .sev-LOW,.sev-NONE{color:var(--general)}
+.pill.kev{background:#ff3b4e;border-color:#ff3b4e;color:#fff}
+.pill.poc{color:#ff7a45}
+.pill.epss{color:var(--dim);font-weight:500}
+.pill.epss.mid{color:#ff9f1c} .pill.epss.high{color:#ff3b4e}
+.prod{color:var(--dim)}
+.more-cves{color:var(--faint)}
+.cve-box{border-top:1px dashed var(--line);margin-top:6px;padding-top:6px}
+.cve-row{padding:8px 2px;border-bottom:1px solid rgba(29,42,34,.6);font-size:12px}
+.cve-row:last-of-type{border-bottom:0}
+.cve-row .line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cve-row .desc{color:var(--dim);margin-top:4px;line-height:1.5}
+.cve-row a{color:var(--green)}
+.legend{color:var(--faint);font-size:10px;line-height:1.6;padding:6px 2px 2px}
 .detail{display:none;margin-top:10px;border-top:1px dashed var(--line);padding-top:4px}
 .card.open .detail{display:block}
 .row{display:flex;gap:10px;align-items:flex-start;padding:8px 2px;font-size:12px;border-bottom:1px solid rgba(29,42,34,.6);border-radius:4px}
@@ -270,7 +288,7 @@ function normalize(data){
       socialOnly: !!s.social_only,
       first: Date.parse(s.first_seen) + shift,
       last: Date.parse(s.updated || s.first_seen) + shift,
-      hay: [s.title, ...(s.sources || []).flatMap(x => [x.name, x.title])].join(" \n ").toLowerCase(),
+      hay: [s.title, ...(s.sources || []).flatMap(x => [x.name, x.title]), ...(s.cves || []).flatMap(c => [c.id, c.product || ""])].join(" \n ").toLowerCase(),
     };
     // BREAKING: 4+ sources within 6h of the first report, first report < 12h old
     const early = sources.filter(x => x.ts - st.first <= 6*3600e3).length;
@@ -297,6 +315,37 @@ function renderControls(){
       v.short ? `<span class="lbl-long">${esc(v.label)}</span><span class="lbl-short" style="display:none">${esc(v.short)}</span>` : esc(v.label)}</button>`
   ).join("");
   $("reset").hidden = topic === "all" && source === "all";
+}
+
+/* ---------- CVE context ---------- */
+const pct = v => v >= 0.1 ? Math.round(v*100) + "%" : (v*100).toFixed(1).replace(/\.0$/, "") + "%";
+function cvePills(c, {epss = true} = {}){
+  let h = "";
+  if (c.cvss != null) h += `<span class="pill sev-${esc(c.sev || "NONE")}" title="CVSS severity score (0–10)">${Number(c.cvss).toFixed(1)} ${esc((c.sev || "").toLowerCase())}</span>`;
+  if (c.kev) h += `<span class="pill kev" title="On CISA's Known Exploited Vulnerabilities list: attackers are using it">${icon("ti-flame")}EXPLOITED</span>`;
+  if (c.poc) h += `<span class="pill poc" title="Public exploit code found on GitHub">${icon("ti-code")}PoC${c.poc > 1 ? " ×" + c.poc : ""}</span>`;
+  if (epss && c.epss != null){
+    const lvl = c.epss >= 0.5 ? "high" : c.epss >= 0.1 ? "mid" : "";
+    h += `<span class="pill epss ${lvl}" title="EPSS: chance this gets exploited in the next 30 days">EPSS ${pct(c.epss)}</span>`;
+  }
+  return h;
+}
+function cveStrip(s){
+  if (!s.cves || !s.cves.length) return "";
+  const c = s.cves[0], extra = s.cves.length - 1;
+  return `<div class="cves"><span class="cve-id">${hl(c.id)}</span>${cvePills(c)}
+    ${c.product ? `<span class="prod">${hl(c.product)}</span>` : ""}
+    ${extra > 0 ? `<span class="more-cves">+${extra} more ${extra===1?"CVE":"CVEs"}</span>` : ""}</div>`;
+}
+function cveDetail(s){
+  if (!s.cves || !s.cves.length) return "";
+  return `<div class="cve-box">${s.cves.map(c => `<div class="cve-row">
+      <div class="line"><a href="https://nvd.nist.gov/vuln/detail/${esc(c.id)}" target="_blank" rel="noopener noreferrer">${esc(c.id)} ${icon("ti-external-link")}</a>
+        ${cvePills(c)}${c.product ? `<span class="prod">${esc(c.product)}</span>` : ""}</div>
+      ${c.desc ? `<div class="desc">${esc(c.desc)}${c.desc.length >= 240 ? "…" : ""}</div>` : ""}
+      ${c.poc_url ? `<div class="desc">${icon("ti-code")} Top public PoC: <a href="${esc(safeUrl(c.poc_url))}" target="_blank" rel="noopener noreferrer">${esc(c.poc_url.replace(/^https:\/\/github.com\//, ""))}</a> <span style="color:var(--faint)">(unverified code, review before running)</span></div>` : ""}
+    </div>`).join("")}
+    <div class="legend">CVSS = severity 0–10 · EXPLOITED = on CISA's known-exploited list · PoC = public exploit code · EPSS = chance of exploitation in the next 30 days</div></div>`;
 }
 
 /* ---------- cards ---------- */
@@ -346,12 +395,14 @@ function card(s, isNew){
       ${n >= 5 && !s.breaking ? `<span class="hot">${icon("ti-trending-up")} Trending</span>` : ""}
       ${isUnseen(s) ? `<span class="new-badge">NEW</span>` : ""}</div>
     <div class="title">${hl(s.title)}</div>
+    ${cveStrip(s)}
     <div class="foot">
       <span class="badge k-${esc(first.kind)}">${icon(w.icon)}${esc(w.name)}</span>
-      ${n > 1 ? `<button class="toggle" type="button">+${n-1} more ${n-1===1?"source":"sources"} ${icon("ti-chevron-down")}</button>` : ""}
+      ${n > 1 ? `<button class="toggle" type="button">+${n-1} more ${n-1===1?"source":"sources"} ${icon("ti-chevron-down")}</button>`
+              : (s.cves && s.cves.length ? `<button class="toggle" type="button">CVE details ${icon("ti-chevron-down")}</button>` : "")}
       ${nSocial && !s.socialOnly ? `<span class="soc-count">${icon("ti-message-circle")}${nSocial} social ${nSocial===1?"post":"posts"}</span>` : ""}
     </div>
-    <div class="detail">${rowsHTML(s.sources)}</div>
+    <div class="detail">${cveDetail(s)}${rowsHTML(s.sources)}</div>
   </article>`;
 }
 

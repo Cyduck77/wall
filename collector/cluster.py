@@ -227,6 +227,7 @@ def build_stories(items):
             "source": srcs[0]["source"],
             "first_seen": ms[0]["published"],
             "updated": ms[-1]["published"],
+            "_member_cves": [c for m in ms for c in m.get("cves", [])],
             "sources": [{"name": m["source"], "url": m["url"], "title": m["title"],
                          "published": m["published"], "kind": m["kind"],
                          **({"platform": m["platform"]} if m.get("platform") else {})} for m in srcs],
