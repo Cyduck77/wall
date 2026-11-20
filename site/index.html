@@ -215,6 +215,8 @@ seen = new Set(store.get("wall.seen", []));
 topic = TOPICS[store.get("wall.topic", "all")] ? store.get("wall.topic", "all") : "all";
 source = SOURCES[store.get("wall.source", "all")] ? store.get("wall.source", "all") : "all";
 const hadHistory = seen.size > 0;
+const prevVisit = store.get("wall.lastVisit", null);          // null on the very first visit
+const markVisit = () => store.set("wall.lastVisit", Date.now());
 const saveSeen = () => store.set("wall.seen", [...seen].slice(-3000));
 
 /* ---------- helpers ---------- */
@@ -298,7 +300,9 @@ function renderControls(){
 }
 
 /* ---------- cards ---------- */
-const isUnseen = s => !seen.has(s.id) && (hadHistory || !firstLoad);
+// NEW = first reported since your previous visit (or arrived while the page was open), and not opened yet
+const isUnseen = s => !seen.has(s.id) && ((prevVisit && s.first > prevVisit) || (!firstLoad && arrivedLive.has(s.id)));
+const arrivedLive = new Set();
 const autoOpen = s => terms.length && !terms.every(t => s.title.toLowerCase().includes(t));
 
 function rowsHTML(rows, {firstMark = true, groupLabel = false} = {}){
@@ -344,8 +348,7 @@ function card(s, isNew){
     <div class="title">${hl(s.title)}</div>
     <div class="foot">
       <span class="badge k-${esc(first.kind)}">${icon(w.icon)}${esc(w.name)}</span>
-      ${n > 1 ? `<button class="toggle" type="button">+${n-1} more ${n-1===1?"source":"sources"} ${icon("ti-chevron-down")}</button>`
-              : `<button class="toggle" type="button" aria-label="Show source">${icon("ti-chevron-down")}</button>`}
+      ${n > 1 ? `<button class="toggle" type="button">+${n-1} more ${n-1===1?"source":"sources"} ${icon("ti-chevron-down")}</button>` : ""}
       ${nSocial && !s.socialOnly ? `<span class="soc-count">${icon("ti-message-circle")}${nSocial} social ${nSocial===1?"post":"posts"}</span>` : ""}
     </div>
     <div class="detail">${rowsHTML(s.sources)}</div>
@@ -414,13 +417,14 @@ async function load(){
     lastGen = data.generated_at;
     const fresh = normalize(data);
     const newIds = new Set(firstLoad ? [] : fresh.filter(s => !known.has(s.id)).map(s => s.id));
+    newIds.forEach(id => arrivedLive.add(id));
     stories = fresh; stories.forEach(s => known.add(s.id));
     render(newIds);
     if (newIds.size && window.scrollY > 200){
       $("newpill").textContent = `↑ ${newIds.size} new ${newIds.size===1?"story":"stories"}`;
       $("newpill").style.display = "block";
     }
-    if (firstLoad && !hadHistory){ stories.forEach(s => seen.add(s.id)); saveSeen(); }
+
     firstLoad = false;
     updateStatus();
   }catch(e){
@@ -471,7 +475,8 @@ $("q").addEventListener("keydown", e => {
 $("clear").addEventListener("click", e => { e.preventDefault(); $("q").value = ""; $("q").dispatchEvent(new Event("input")); $("q").focus(); });
 $("newpill").addEventListener("click", () => { window.scrollTo({top:0, behavior:"smooth"}); $("newpill").style.display="none"; });
 window.addEventListener("scroll", () => { if (window.scrollY < 100) $("newpill").style.display = "none"; }, {passive:true});
-document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) markVisit(); else load(); });
+window.addEventListener("pagehide", markVisit);
 
 load();
 setInterval(load, POLL_MS);
