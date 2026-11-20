@@ -320,7 +320,10 @@ def main():
         sys.exit("no items at all — refusing to publish an empty wall")
 
     stories = build_stories(items)
-    print(f"stories: {len(stories)}  (multi-source: {sum(len(s['sources']) > 1 for s in stories)})")
+    from collections import Counter
+    print(f"stories: {len(stories)}  (multi-source: {sum(len(s['sources']) > 1 and not s.get('bundle') for s in stories)})")
+    print("  tags:", dict(Counter(s["tag"] for s in stories)))
+    print("  claim bundles:", {s["id"]: len(s["sources"]) for s in stories if s.get("bundle")})
 
     os.makedirs(a.out, exist_ok=True)
     feed = {

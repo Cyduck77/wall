@@ -20,7 +20,7 @@
 :root{
   --bg:#0a0e0b; --panel:#0f1511; --panel2:#131b16; --line:#1d2a22;
   --text:#d3f5dc; --dim:#6b8a75; --faint:#3a5143; --green:#39ff88;
-  --breach:#ff4d5e; --cve:#ff9f1c; --ransomware:#b46cff; --general:#3fa7ff; --social:#ff5fc8;
+  --breach:#ff4d5e; --cve:#ff9f1c; --ransomware:#b46cff; --general:#8aa394; --threat:#ffd23f; --policy:#3fa7ff; --social:#ff5fc8; --hotred:#ff3b4e;
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -92,6 +92,12 @@ main{padding:4px 12px 80px}
 .plat{font-weight:700;font-size:9px;letter-spacing:.6px;background:var(--social);color:#1a0613;border-radius:3px;padding:1px 4px;margin-right:2px}
 .soc{color:var(--social);font-size:10px;margin-left:2px}
 .row .n.is-soc{color:var(--social)}
+.brk{color:#fff;background:var(--hotred);font-weight:700;font-size:10px;letter-spacing:.8px;border-radius:3px;padding:1px 6px;animation:pulse 1.6s infinite}
+.card.is-brk{box-shadow:0 0 0 1px rgba(255,59,78,.35),0 0 18px rgba(255,59,78,.12)}
+.brk-sep{color:var(--hotred)}
+.brk-sep::before,.brk-sep::after{background:rgba(255,59,78,.35)}
+.groups{font-size:12px;color:var(--ransomware);margin-top:6px;line-height:1.5}
+.grp{color:var(--ransomware);font-weight:700}
 .detail{display:none;margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
 .card.open .detail{display:block}
 .row{display:flex;gap:10px;padding:7px 0;font-size:12px;border-bottom:1px solid rgba(29,42,34,.6)}
@@ -134,7 +140,9 @@ const TAGS = {
   breach:{label:"Breach",c:"var(--breach)"},
   cve:{label:"CVE",c:"var(--cve)"},
   ransomware:{label:"Ransom",c:"var(--ransomware)"},
-  general:{label:"General",c:"var(--general)"},
+  threat:{label:"Threats",c:"var(--threat)"},
+  policy:{label:"Policy/Law",c:"var(--policy)"},
+  general:{label:"Other",c:"var(--general)"},
   social:{label:"Social",c:"var(--social)"}
 };
 const PLATFORM = {telegram:"TG", bluesky:"BSKY", mastodon:"MSTDN"};
@@ -190,26 +198,50 @@ function normalize(data){
     first: Date.parse(s.first_seen) + shift,
     last: Date.parse(s.updated || s.first_seen) + shift,
     sources: (s.sources || []).map(x => ({...x, ts: Date.parse(x.published) + shift})).sort((a,b) => a.ts - b.ts)
-  })).sort((a,b) => b.last - a.last);
+  })).map(s => {
+    // BREAKING: 4+ sources within 6h of the first report, first report < 12h old
+    const early = s.sources.filter(x => x.ts - s.first <= 6*3600e3).length;
+    s.breaking = !s.bundle && early >= 4 && Date.now() - s.first < 12*3600e3;
+    return s;
+  }).sort((a,b) => b.last - a.last);
 }
 
 function renderFilters(){
   const counts = {};
   Object.keys(TAGS).forEach(k => counts[k] = stories.filter(s => matches(s, k)).length);
-  $("filters").innerHTML = Object.entries(TAGS).map(([k,v]) =>
+  $("filters").innerHTML = Object.entries(TAGS).filter(([k]) => k === "all" || k === filter || counts[k]).map(([k,v]) =>
     `<button class="chip ${filter===k?"on":""}" data-f="${k}" style="--c:${v.c}">
       ${k==="all"?"":`<i style="background:${v.c}"></i>`}${v.label} <b>${counts[k]||0}</b></button>`).join("");
 }
 
+function bundleCard(s, isNew){
+  const c = TAGS.ransomware.c, n = s.sources.length;
+  const groups = (s.groups || []).slice(0, 4).map(([g,k]) => `${esc(g)} ${k}`).join(" · ") + ((s.groups||[]).length > 4 ? ` · +${s.groups.length-4} more` : "");
+  const unseen = !seen.has(s.id) && (hadHistory || !firstLoad);
+  const rows = [...s.sources].reverse();
+  return `<article class="card bundle ${isNew?"new":""} ${opened.has(s.id) || autoOpen(s)?"open":""}" data-id="${esc(s.id)}" style="--c:${c}">
+    <div class="meta"><span class="tag">[RANSOM · CLAIMS]</span><span>${ago(s.last)}</span>${unseen?`<span class="unseen"></span>`:""}</div>
+    <div class="title">☠ ${n} ransomware & leak-site ${n===1?"claim":"claims"}</div>
+    <div class="groups">${groups}</div>
+    <div class="srcs"><span class="badge">ransomware.live</span><span class="more">tap to see victims</span></div>
+    <div class="detail">${rows.map(x => `
+      <a class="row" href="${esc(safeUrl(x.url))}" target="_blank" rel="noopener noreferrer">
+        <span class="t">${ago(x.ts)}</span>
+        <span class="n"><b class="grp">${esc(x.name)}</b><span>${hl(x.title||"")}</span></span>
+        <span class="go">↗</span></a>`).join("")}</div>
+  </article>`;
+}
+
 function card(s, isNew){
+  if (s.bundle) return bundleCard(s, isNew);
   const c = s.socialOnly ? TAGS.social.c : TAGS[s.tag].c, n = s.sources.length, first = s.sources[0] || {name:s.source};
   const label = s.socialOnly ? "SOCIAL" + (s.tag !== "general" ? " · " + TAGS[s.tag].label.toUpperCase() : "") : TAGS[s.tag].label.toUpperCase();
   const nSocial = s.sources.filter(isSocialSrc).length;
   const heat = Math.min(100, n * 14);
   const unseen = !seen.has(s.id) && (hadHistory || !firstLoad);
-  return `<article class="card ${isNew?"new":""} ${opened.has(s.id)?"open":""}" data-id="${esc(s.id)}" style="--c:${c}">
-    <div class="meta"><span class="tag">[${label}]</span><span>${ago(s.last)}</span>
-      ${n>=5?`<span class="hot">▲ trending</span>`:""}${unseen?`<span class="unseen"></span>`:""}</div>
+  return `<article class="card ${s.breaking?"is-brk":""} ${isNew?"new":""} ${opened.has(s.id) || autoOpen(s)?"open":""}" data-id="${esc(s.id)}" style="--c:${c}">
+    <div class="meta">${s.breaking?`<span class="brk">● BREAKING</span>`:""}<span class="tag">[${label}]</span><span>${ago(s.last)}</span>
+      ${n>=5 && !s.breaking?`<span class="hot">▲ trending</span>`:""}${unseen?`<span class="unseen"></span>`:""}</div>
     <div class="title">${hl(s.title)}</div>
     <div class="srcs">${srcBadge(first)}${n>1?`<span class="more">+${n-1}</span>`:""}${nSocial && !s.socialOnly?`<span class="soc">◆ ${nSocial} social</span>`:""}</div>
     <div class="bar"><span style="width:${heat}%"></span></div>
@@ -220,6 +252,9 @@ function card(s, isNew){
         <span class="go">↗</span></a>`).join("")}</div>
   </article>`;
 }
+
+// while searching, open cards whose match is inside the source list, not the headline
+function autoOpen(s){ return terms.length && !terms.every(t => s.title.toLowerCase().includes(t)); }
 
 function srcName(x){
   if (!isSocialSrc(x)) return esc(x.name);
@@ -236,12 +271,21 @@ function render(newIds = new Set()){
     return;
   }
   let html = terms.length ? `<div class="hits">${list.length} ${list.length===1?"story":"stories"} match “${esc(query)}”</div>` : "", last = "";
-  for (const s of list.slice(0, limit)){
+  let rest = list;
+  if (!terms.length){
+    const pinned = list.filter(s => s.breaking).sort((a,b) => b.sources.length - a.sources.length).slice(0, 3);
+    if (pinned.length){
+      html += `<div class="sep brk-sep">● breaking</div>` + pinned.map(s => card(s, newIds.has(s.id))).join("");
+      const ids = new Set(pinned.map(s => s.id));
+      rest = list.filter(s => !ids.has(s.id));
+    }
+  }
+  for (const s of rest.slice(0, limit)){
     const d = dayLabel(s.last);
     if (d !== last){ html += `<div class="sep">${esc(d)}</div>`; last = d; }
     html += card(s, newIds.has(s.id));
   }
-  if (list.length > limit) html += `<div class="sep" id="more">loading more…</div>`;
+  if (rest.length > limit) html += `<div class="sep" id="more">loading more…</div>`;
   $("feed").innerHTML = html;
   const m = $("more"); if (m) moreObs.observe(m);
   let foot = `${stories.length} stories · ${stories.reduce((a,s)=>a+s.sources.length,0)} reports · 7-day window`;

@@ -46,7 +46,19 @@ TAG_RULES = [
                           r"cyber incident|security incident", re.I)),
     ("cve", re.compile(r"\bcve-\d|vulnerab|zero-day|0-day|\bflaws?\b|exploit|\bpatch|\brce\b|"
                        r"remote code|security update|advisory|\bkev\b|bug", re.I)),
+    ("policy", re.compile(r"arrest|charged|sentenc|indict|extradit|plead|convict|\bpolice|europol|interpol|"
+                          r"\bfbi\b|\bdoj\b|justice department|law enforcement|takedown|dismantl|seiz|sanction|"
+                          r"\bfined?\b|fines\b|penalt|regulat|lawsuit|\bsues?\b|court|legislat|\bbill\b|congress|"
+                          r"parliament|senat|\bgdpr\b|\bnis2\b|\bftc\b|\bsec\b|\bico\b|policy|ban(s|ned)?\b|"
+                          r"ministry|minister|government|white house|executive order|cisa (warns|urges|orders)", re.I)),
+    ("threat", re.compile(r"malware|\bapt\d*\b|campaign|backdoor|botnet|phish|stealer|trojan|\brat\b|loader|"
+                          r"spyware|threat actor|hackers?\b|espionage|wiper|rootkit|ddos|scam|fraud|infostealer|"
+                          r"supply.chain|worm|c2\b|command.and.control|social engineering|attacks?\b", re.I)),
 ]
+
+# accounts whose posts are mostly "group X claims victim Y" alerts
+CLAIM_ACCOUNTS = {"Bluesky · FalconFeeds", "Bluesky · HackManac"}
+GROUP_RE = re.compile(r"^(.+?) ransomware claims ", re.I)
 
 
 CORP = set("inc llc ltd gmbh corp co sa ag plc group bv srl spa limited company".split())
@@ -203,5 +215,63 @@ def build_stories(items):
                          "published": m["published"], "kind": m["kind"],
                          **({"platform": m["platform"]} if m.get("platform") else {})} for m in srcs],
         })
+    stories = bundle_claims(stories)
     stories.sort(key=lambda s: s["updated"], reverse=True)
     return stories
+
+
+def is_claim(story):
+    """Single-victim claim nobody in the news has picked up yet."""
+    src = story["sources"]
+    if story["tag"] != "ransomware":
+        return False
+    return all(x["kind"] == "leak" or x["name"] in CLAIM_ACCOUNTS for x in src)
+
+
+def claim_group(story):
+    for x in story["sources"]:
+        m = GROUP_RE.match(x["title"]) if x["kind"] == "leak" else None
+        if m:
+            return m.group(1).strip()
+    t = " ".join(x["title"] for x in story["sources"])
+    m = TAG_RULES[0][1].search(t)
+    g = m.group(0) if m else ""
+    return g.title() if g and g.lower() not in ("ransom", "extortion", "leak site") else "Unattributed"
+
+
+def bundle_claims(stories):
+    """Collapse leak-site / claim-alert stories into one card per Athens day."""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/Athens")
+    except Exception:
+        tz = dt.timezone.utc
+    keep, days = [], {}
+    for st in stories:
+        if not is_claim(st):
+            keep.append(st)
+            continue
+        day = _parse(st["first_seen"]).astimezone(tz).date().isoformat()
+        days.setdefault(day, []).append(st)
+    for day, claims in days.items():
+        claims.sort(key=lambda c: c["first_seen"])
+        groups = Counter(claim_group(c) for c in claims)
+        rows = []
+        for c in claims:
+            rows.append({"name": claim_group(c), "url": c["url"], "title": c["title"],
+                         "published": c["first_seen"], "kind": "leak",
+                         "via": sorted({x["name"] for x in c["sources"]})})
+        keep.append({
+            "id": "claims-" + day,
+            "bundle": "claims",
+            "tag": "ransomware",
+            "social_only": False,
+            "title": f"{len(claims)} ransomware & leak-site claims",
+            "groups": [[g, n] for g, n in groups.most_common()],
+            "url": rows[-1]["url"],
+            "source": "ransomware.live",
+            "first_seen": claims[0]["first_seen"],
+            "updated": max(c["updated"] for c in claims),
+            "sources": rows,
+        })
+    return keep
