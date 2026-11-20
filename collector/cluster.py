@@ -63,6 +63,8 @@ TAG_RULES = [
 # accounts whose posts are mostly "group X claims victim Y" alerts
 CLAIM_ACCOUNTS = {"Bluesky · FalconFeeds", "Bluesky · HackManac"}
 GROUP_RE = re.compile(r"^(.+?) ransomware claims ", re.I)
+NAMED_GANG = re.compile(r"(?:—|-|by|the)\s+([A-Z0-9][\w.]{2,}(?: [A-Z0-9][\w.]*)?)\s+ransomware", re.I)
+NOT_A_GANG = {"a", "the", "new", "of", "by", "ransomware", "suspected", "alleged", "unknown"}
 
 
 CORP = set("inc llc ltd gmbh corp co sa ag plc group bv srl spa limited company".split())
@@ -248,6 +250,9 @@ def claim_group(story):
         if m:
             return m.group(1).strip()
     t = " ".join(x["title"] for x in story["sources"])
+    m = NAMED_GANG.search(t)
+    if m and m.group(1).lower() not in NOT_A_GANG:
+        return m.group(1).strip().title()
     m = TAG_RULES[0][1].search(t)
     g = m.group(0) if m else ""
     return g.title() if g and g.lower() not in ("ransom", "extortion", "leak site") else "Unattributed"
@@ -285,7 +290,7 @@ def bundle_claims(stories):
             "url": rows[-1]["url"],
             "source": "ransomware.live",
             "first_seen": claims[0]["first_seen"],
-            "updated": max(c["updated"] for c in claims),
+            "updated": max(c["first_seen"] for c in claims),
             "sources": rows,
         })
     return keep
