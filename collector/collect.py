@@ -21,7 +21,7 @@ import numpy as np
 import requests
 
 sys.path.insert(0, os.path.dirname(__file__))
-from sources import RSS, CISA_KEV, RANSOMWARE_LIVE, BLUESKY, MASTODON, TELEGRAM, STRICT, SKIP_TITLE  # noqa: E402
+from sources import RSS, HIBP_BREACHES, CISA_KEV, RANSOMWARE_LIVE, BLUESKY, MASTODON, TELEGRAM, STRICT, SKIP_TITLE  # noqa: E402
 from cluster import build_stories  # noqa: E402
 
 WINDOW_H = 168            # keep 7 days
@@ -195,6 +195,27 @@ def fetch_telegram(name, channel):
     return out
 
 
+def fetch_hibp():
+    """Breaches newly loaded into Have I Been Pwned (by the date HIBP added them)."""
+    out = []
+    for b in get(HIBP_BREACHES).json():
+        try:
+            added = dt.datetime.fromisoformat(b["AddedDate"].replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if NOW - added > dt.timedelta(hours=WINDOW_H) or b.get("IsSpamList") or b.get("IsFabricated"):
+            continue
+        classes = ", ".join(c.lower() for c in (b.get("DataClasses") or [])[:4])
+        flag = "" if b.get("IsVerified", True) else " (unverified)"
+        title = f"{b['Title']}{flag}: {b.get('PwnCount', 0):,} accounts added to Have I Been Pwned" + \
+                (f" — {classes}" if classes else "")
+        url = f"https://haveibeenpwned.com/Breach/{b['Name']}"
+        out.append({"id": item_id(url, title), "title": title, "url": url, "source": "Have I Been Pwned",
+                    "kind": "hibp", "published": iso(min(added, NOW)),
+                    "breach_date": b.get("BreachDate"), "domain": b.get("Domain") or ""})
+    return out
+
+
 def fetch_kev():
     data = get(CISA_KEV).json()
     out = []
@@ -249,6 +270,7 @@ def collect():
     jobs.update({f"Mastodon · {n}": (fetch_mastodon, (n, i, a)) for n, i, a in MASTODON})
     jobs.update({f"Telegram · {n}": (fetch_telegram, (n, c)) for n, c in TELEGRAM})
     jobs["CISA KEV"] = (fetch_kev, ())
+    jobs["Have I Been Pwned"] = (fetch_hibp, ())
     jobs["ransomware.live"] = (fetch_ransomware_live, ())
     items, ok, failed = [], [], []
     with cf.ThreadPoolExecutor(max_workers=12) as ex:

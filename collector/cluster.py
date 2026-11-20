@@ -115,6 +115,8 @@ def embed(texts):
 
 # ------------------------------------------------------------- tagging
 def tag_story(members):
+    if any(m["kind"] == "hibp" for m in members):
+        return "pwned"
     if any(m["kind"] == "leak" for m in members):
         return "ransomware"
     if all(m["kind"] == "advisory" for m in members):
@@ -133,7 +135,7 @@ def tag_story(members):
     return "general"
 
 
-SOURCE_RANK = {"news": 0, "advisory": 1, "vendor": 2, "social": 3, "leak": 4}
+SOURCE_RANK = {"news": 0, "advisory": 1, "hibp": 1, "vendor": 2, "social": 3, "leak": 4}
 
 
 def build_stories(items):
@@ -157,6 +159,10 @@ def build_stories(items):
         title_l = it["title"].lower()
         best, best_score = None, -1.0
         for c in clusters:
+            if it["kind"] == "hibp":
+                break                     # HIBP entries always get their own card
+            if c.get("hibp"):
+                continue
             if (ts - c["last"]).total_seconds() > ACTIVE_H * 3600:
                 continue
             if is_leak or c["has_leak"]:
@@ -183,6 +189,8 @@ def build_stories(items):
             best = {"members": [], "vec_sum": np.zeros_like(vecs[i]), "rare": set(), "cves": set(),
                     "links": set(), "all_toks": set(), "has_leak": False, "victim_toks": set(), "vnames": set(), "text": "", "last": ts}
             clusters.append(best)
+        if it["kind"] == "hibp":
+            best["hibp"] = True
         best["members"].append(it)
         best["vec_sum"] += vecs[i]
         best["rare"] |= rare[i]

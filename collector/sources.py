@@ -44,6 +44,7 @@ RSS = [
     # Reddit blocks GitHub Actions IPs (429/404) -> re-add later via a different route
 ]
 
+HIBP_BREACHES = "https://haveibeenpwned.com/api/v3/breaches"   # free, no key
 CISA_KEV = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 RANSOMWARE_LIVE = "https://api.ransomware.live/v2/recentvictims"
 
