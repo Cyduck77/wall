@@ -323,6 +323,9 @@ def main():
     from collections import Counter
     print(f"stories: {len(stories)}  (multi-source: {sum(len(s['sources']) > 1 and not s.get('bundle') for s in stories)})")
     print("  tags:", dict(Counter(s["tag"] for s in stories)))
+    if True:  # log a sample of untagged stories to tune the tag rules
+        for s_ in [s for s in stories if s["tag"] == "general"][:80]:
+            print("  GEN |", s_["sources"][0]["name"], "|", s_["title"][:110])
     print("  claim bundles:", {s["id"]: len(s["sources"]) for s in stories if s.get("bundle")})
 
     os.makedirs(a.out, exist_ok=True)
