@@ -21,7 +21,7 @@ import numpy as np
 import requests
 
 sys.path.insert(0, os.path.dirname(__file__))
-from sources import RSS, CISA_KEV, RANSOMWARE_LIVE, BLUESKY, MASTODON, TELEGRAM  # noqa: E402
+from sources import RSS, CISA_KEV, RANSOMWARE_LIVE, BLUESKY, MASTODON, TELEGRAM, STRICT, SKIP_TITLE  # noqa: E402
 from cluster import build_stories  # noqa: E402
 
 WINDOW_H = 168            # keep 7 days
@@ -76,6 +76,10 @@ def fetch_rss(name, url, kind):
         link = e.get("link") or ""
         if "news.google.com" in url:
             title = re.sub(r"\s+-\s+[^-]+$", "", title)
+        if re.search(SKIP_TITLE, title, re.I):
+            continue
+        if name in STRICT and not SEC_RX.search(title):
+            continue                      # general tech / lifestyle / sponsored
         if len(title) < 15 or not link.startswith("http"):
             continue
         if kind == "social":
@@ -100,7 +104,8 @@ def fetch_rss(name, url, kind):
 SEC_RX = re.compile(r"\b(breach\w*|ransom\w*|cve-\d|exploit\w*|vulnerab\w*|zero-?days?|0-?days?|hack(ed|ers?|ing)?|"
                     r"leak(ed|s)?|malware|phish\w*|backdoor\w*|botnets?|apt\d+|patch(ed|es)?|attack(s|ed|ers?)?|"
                     r"\w*stealer|compromis\w*|threat actors?|ddos|extort\w*|spyware|rootkit|trojan\w*|wiper|"
-                    r"cisa|incident|victims?|data theft|credentials?)\b", re.I)
+                    r"cisa|incident|victims?|data theft|credentials?|steal\w*|scam\w*|fraud\w*|privacy|spy\w*|surveil\w*|"
+                    r"passwords?|security|cyber\w*|deepfakes?|darknet|dark web|encrypt\w*|takedown|arrest\w*)\b", re.I)
 MOCK_RX = re.compile(r"([a-z][A-Z]){3}")      # mOcKiNg case memes
 ALERT_HDR = re.compile(r"^\W*(new )?(cyber|threat intelligence|ransomware|data breach|data leak|hacktivist|security)?"
                        r"\s*(alert|breaking|update)s?\W*$", re.I)
@@ -126,7 +131,7 @@ def social_title(text):
 
 def social_item(platform, name, text, url, when, ext=None):
     title = social_title(text)
-    if len(title) < 25 or not SEC_RX.search(text or "") or MOCK_RX.search(text or ""):
+    if len(title) < 25 or not SEC_RX.search(title) or MOCK_RX.search(text or ""):
         return None                       # chit-chat / memes
     pub = min(when, NOW)
     return {"id": item_id(url, title), "title": title, "url": url,
@@ -312,8 +317,10 @@ def main():
     prev = load_prev(a.prev_url, a.offline_state)
     # re-apply today's filters to stored items, so rule changes clean up the history too
     blocked = {"Sophos News", "SC Media", "GBHackers"}
-    prev = [p for p in prev if p["source"] not in blocked and
-            (p["kind"] != "social" or (SEC_RX.search(p["title"]) and not MOCK_RX.search(p["title"])))]
+    prev = [p for p in prev if p["source"] not in blocked
+            and not re.search(SKIP_TITLE, p["title"], re.I)
+            and (p["source"] not in STRICT or SEC_RX.search(p["title"]))
+            and (p["kind"] != "social" or (SEC_RX.search(p["title"]) and not MOCK_RX.search(p["title"])))]
     items = merge(prev, new)
     print(f"items: new={len(new)} prev={len(prev)} window={len(items)}")
     if not items:

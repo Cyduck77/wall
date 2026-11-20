@@ -43,17 +43,21 @@ TAG_RULES = [
                               r"inc ransom|hunters international|ransomhub|scattered spider", re.I)),
     ("breach", re.compile(r"breach|data leak|leaked|exposed|stolen|hacked|compromis|unauthori[sz]ed access|"
                           r"data theft|customer data|personal data|records|cyberattack|cyber attack|creds|credential|dump|"
-                          r"cyber incident|security incident", re.I)),
+                          r"cyber incident|security incident|offered|for sale|\bfullz\b|\bcvvs?\b|database|profiles", re.I)),
     ("cve", re.compile(r"\bcve-\d|vulnerab|zero-day|0-day|\bflaws?\b|exploit|\bpatch|\brce\b|"
-                       r"remote code|security update|advisory|\bkev\b|bug", re.I)),
+                       r"remote code|security update|advisory|\bkev\b|bug|vuln\w*|\w+[24]shell\b|hotpatch", re.I)),
     ("policy", re.compile(r"arrest|charged|sentenc|indict|extradit|plead|convict|\bpolice|europol|interpol|"
                           r"\bfbi\b|\bdoj\b|justice department|law enforcement|takedown|dismantl|seiz|sanction|"
                           r"\bfined?\b|fines\b|penalt|regulat|lawsuit|\bsues?\b|court|legislat|\bbill\b|congress|"
                           r"parliament|senat|\bgdpr\b|\bnis2\b|\bftc\b|\bsec\b|\bico\b|policy|ban(s|ned)?\b|"
-                          r"ministry|minister|government|white house|executive order|cisa (warns|urges|orders)", re.I)),
+                          r"ministry|minister|government|white house|executive order|cisa (warns|urges|orders)|lawmaker|\bmps?\b|"
+                          r"caucus|watchdog|nominee|nominat|cyber director|\bdems?\b|republican|democrat|accused|"
+                          r"shut(s|ting)? down|crackdown|illegal|insurer|compliance", re.I)),
     ("threat", re.compile(r"malware|\bapt\d*\b|campaign|backdoor|botnet|phish|stealer|trojan|\brat\b|loader|"
                           r"spyware|threat actor|hackers?\b|espionage|wiper|rootkit|ddos|scam|fraud|infostealer|"
-                          r"supply.chain|worm|c2\b|command.and.control|social engineering|attacks?\b", re.I)),
+                          r"supply.chain|worm|c2\b|command.and.control|social engineering|attack(s|ed)?\b|"
+                          r"\bactor\b|aligned|nation.state|north korea|china.nexus|deepfake|impersonat|"
+                          r"infosteal\w*|dead drops?|honeypot|fake \w+ sites?|steal logins", re.I)),
 ]
 
 # accounts whose posts are mostly "group X claims victim Y" alerts
@@ -113,6 +117,8 @@ def embed(texts):
 def tag_story(members):
     if any(m["kind"] == "leak" for m in members):
         return "ransomware"
+    if all(m["kind"] == "advisory" for m in members):
+        return "cve"                      # CISA ICS advisories etc.
     score = Counter()
     for m in members:
         for tag, rx in TAG_RULES:

@@ -6,6 +6,8 @@ kind:
   advisory  - government / CERT advisories
   social    - community (Reddit etc.)
 A failing source is skipped for that run; it never breaks the build.
+Sources in STRICT mix general tech/sponsored content: their items are kept
+only when the headline itself is about security.
 """
 
 RSS = [
@@ -44,6 +46,9 @@ RSS = [
 
 CISA_KEV = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 RANSOMWARE_LIVE = "https://api.ransomware.live/v2/recentvictims"
+
+STRICT = {"Cybernews", "The Register", "Hackread"}
+SKIP_TITLE = r"^ISC Stormcast|^Sponsored|^\[sponsored\]|webinar"
 
 # --- social (no accounts needed: public endpoints) ---
 # handles verified active on 2026-11-19
