@@ -84,7 +84,7 @@ header{position:sticky;top:0;z-index:20;background:rgba(10,14,11,.94);backdrop-f
 @media (min-width:700px){
   .topics{flex-wrap:wrap;overflow:visible;-webkit-mask-image:none;mask-image:none}
 }
-@media (max-width:420px){ .seg button .lbl-long{display:none} .seg button .lbl-short{display:inline!important} .sourcebar>span:first-child{display:none} }
+@media (max-width:420px){ .upd{display:none} #q::placeholder{font-size:14px} .seg button .lbl-long{display:none} .seg button .lbl-short{display:inline!important} .sourcebar>span:first-child{display:none} }
 
 .demo{margin:12px 16px 0;padding:8px 12px;border:1px dashed var(--cve);color:var(--cve);font-size:11px;border-radius:6px}
 
@@ -403,7 +403,7 @@ function updateStatus(){
   const stale = Date.now() - generatedAt > 45*60000;
   $("status").classList.toggle("stale", stale);
   $("live").textContent = stale ? "Delayed" : "Live";
-  $("synced").textContent = "· updated " + ago(generatedAt);
+  $("synced").innerHTML = `· <span class="upd">updated </span>${ago(generatedAt)}`;
   $("status").title = "Last update: " + new Date(generatedAt).toLocaleString();
 }
 
