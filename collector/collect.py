@@ -95,7 +95,9 @@ def fetch_rss(name, url, kind):
         pub = dt.datetime.fromtimestamp(time.mktime(tp), dt.timezone.utc) if tp else NOW
         pub = min(pub, NOW)
         body = " ".join([title, e.get("summary") or ""] + [c.get("value", "") for c in (e.get("content") or [])])
-        cves = find_cves(body)[:6]
+        cves = find_cves(body)
+        if len(cves) > 3:                     # round-up article: trust only the headline's CVEs
+            cves = find_cves(title)
         it = {"id": item_id(link, title), "title": title, "url": link, "source": name,
               "kind": kind, "published": iso(pub), "ext": ext}
         if cves:

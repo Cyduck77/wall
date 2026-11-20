@@ -128,17 +128,21 @@ def fetch_epss(cves):
 # ---------------------------------------------------------------- main entry
 def enrich(stories, items, cache, now):
     """Attach `cves` (list of dicts) to stories; update and return the cache."""
-    # 1. which CVEs does each story mention (headline first, then article text)
-    wanted = set()
+    # 1. which CVEs does each story mention, and how strongly are they tied to it
     for s in stories:
         if s.get("bundle"):
             continue
-        ids = find_cves(s["title"])
+        headline_ids = find_cves(s["title"])
         for src in s["sources"]:
-            ids += [c for c in find_cves(src.get("title", "")) if c not in ids]
-        ids += [c for c in s.get("_member_cves", []) if c not in ids]
+            headline_ids += [c for c in find_cves(src.get("title", "")) if c not in headline_ids]
+        mentions = {}
+        for c in s.get("_member_cves", []):
+            mentions[c] = mentions.get(c, 0) + 1
+        ids = headline_ids + [c for c in mentions if c not in headline_ids]
         s["_cves"] = ids[:8]
-        wanted.update(s["_cves"])
+        s["_headline_cves"] = set(headline_ids)
+        s["_mentions"] = mentions
+    wanted = {c for s in stories for c in s.get("_cves", [])}
     if not wanted:
         for s in stories:
             s.pop("_cves", None)
@@ -186,16 +190,29 @@ def enrich(stories, items, cache, now):
     print(f"  enrich: {len(wanted)} CVEs in stories, {len(todo_rec)} records + {len(todo_poc)} PoC lookups "
           f"({ok} ok, {fail} failed), {len(epss_todo)} EPSS requested")
 
-    # 3. attach to stories, most dangerous first
-    def danger(c):
-        e = cache.get(c, {})
-        return (e.get("kev", False), e.get("cvss", 0), e.get("epss", 0))
+    # 3. attach to stories: most relevant first, then most dangerous
+    words = lambda t: {w for w in re.findall(r"[a-z0-9][a-z0-9\-]{2,}", (t or "").lower())
+                       if w not in ("the", "and", "for", "remote", "server", "software", "networks", "security")}
 
     for s in stories:
         ids = s.pop("_cves", [])
+        heads = s.pop("_headline_cves", set())
+        mentions = s.pop("_mentions", {})
         if not ids:
             continue
-        ranked = sorted(ids, key=danger, reverse=True)
+        title_words = words(" ".join([s["title"]] + [x.get("title", "") for x in s["sources"]]))
+
+        def rank(c):
+            e = cache.get(c, {})
+            in_head = c in heads
+            prod_match = bool(words(e.get("product", "")) & title_words)
+            return (in_head, prod_match, mentions.get(c, 0), e.get("kev", False), e.get("cvss", 0), e.get("epss", 0))
+
+        ranked = sorted(ids, key=rank, reverse=True)
+        top = cache.get(ranked[0], {})
+        # show the CVE under the headline only when it clearly belongs to this story
+        s["cve_primary"] = (ranked[0] in heads or bool(words(top.get("product", "")) & title_words)
+                            or len(ids) == 1)
         s["cves"] = []
         for c in ranked:
             e = cache.get(c, {})
